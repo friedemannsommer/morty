@@ -23,97 +23,97 @@ type StringTestCase struct {
 	ExpectedOutput string
 }
 
-var attrTestData []*AttrTestCase = []*AttrTestCase{
-	&AttrTestCase{
+var attrTestData = []*AttrTestCase{
+	{
 		[]byte("href"),
 		[]byte("./x"),
 		[]byte(` href="./?mortyurl=http%3A%2F%2F127.0.0.1%2Fx"`),
 	},
-	&AttrTestCase{
+	{
 		[]byte("src"),
 		[]byte("http://x.com/y"),
 		[]byte(` src="./?mortyurl=http%3A%2F%2Fx.com%2Fy"`),
 	},
-	&AttrTestCase{
+	{
 		[]byte("action"),
 		[]byte("/z"),
 		[]byte(` action="./?mortyurl=http%3A%2F%2F127.0.0.1%2Fz"`),
 	},
-	&AttrTestCase{
+	{
 		[]byte("onclick"),
 		[]byte("console.log(document.cookies)"),
 		nil,
 	},
 }
 
-var sanitizeUriTestData []*SanitizeURITestCase = []*SanitizeURITestCase{
-	&SanitizeURITestCase{
+var sanitizeUriTestData = []*SanitizeURITestCase{
+	{
 		[]byte("http://example.com/"),
 		[]byte("http://example.com/"),
 		"http:",
 	},
-	&SanitizeURITestCase{
+	{
 		[]byte("HtTPs://example.com/     \t"),
 		[]byte("https://example.com/"),
 		"https:",
 	},
-	&SanitizeURITestCase{
+	{
 		[]byte("      Ht  TPs://example.com/     \t"),
 		[]byte("https://example.com/"),
 		"https:",
 	},
-	&SanitizeURITestCase{
+	{
 		[]byte("javascript:void(0)"),
 		[]byte("javascript:void(0)"),
 		"javascript:",
 	},
-	&SanitizeURITestCase{
+	{
 		[]byte("      /path/to/a/file/without/protocol     "),
 		[]byte("/path/to/a/file/without/protocol"),
 		"",
 	},
-	&SanitizeURITestCase{
+	{
 		[]byte("      #fragment     "),
 		[]byte("#fragment"),
 		"",
 	},
-	&SanitizeURITestCase{
+	{
 		[]byte("      qwertyuiop     "),
 		[]byte("qwertyuiop"),
 		"",
 	},
-	&SanitizeURITestCase{
+	{
 		[]byte(""),
 		[]byte(""),
 		"",
 	},
-	&SanitizeURITestCase{
+	{
 		[]byte(":"),
 		[]byte(":"),
 		":",
 	},
-	&SanitizeURITestCase{
+	{
 		[]byte("   :"),
 		[]byte(":"),
 		":",
 	},
-	&SanitizeURITestCase{
+	{
 		[]byte("schéma:"),
 		[]byte("schéma:"),
 		"schéma:",
 	},
 }
 
-var urlTestData []*StringTestCase = []*StringTestCase{
-	&StringTestCase{
+var urlTestData = []*StringTestCase{
+	{
 		"http://x.com/",
 		"./?mortyurl=http%3A%2F%2Fx.com%2F",
 	},
-	&StringTestCase{
+	{
 		"http://a@x.com/",
 		"./?mortyurl=http%3A%2F%2Fa%40x.com%2F",
 	},
-	&StringTestCase{
+	{
 		"#a",
 		"#a",
 	},
@@ -176,7 +176,7 @@ func TestURLProxifier(t *testing.T) {
 	}
 }
 
-var BENCH_SIMPLE_HTML []byte = []byte(`<!doctype html>
+var BenchSimpleHtml = []byte(`<!doctype html>
 <html>
  <head>
   <title>test</title>
@@ -192,11 +192,11 @@ func BenchmarkSanitizeSimpleHTML(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		out := bytes.NewBuffer(nil)
-		sanitizeHTML(rc, out, BENCH_SIMPLE_HTML)
+		sanitizeHTML(rc, out, BenchSimpleHtml)
 	}
 }
 
-var BENCH_COMPLEX_HTML []byte = []byte(`<!doctype html>
+var BenchComplexHtml = []byte(`<!doctype html>
 <html>
  <head>
   <noscript><meta http-equiv="refresh" content="0; URL=./xy"></noscript>
@@ -222,6 +222,6 @@ func BenchmarkSanitizeComplexHTML(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		out := bytes.NewBuffer(nil)
-		sanitizeHTML(rc, out, BENCH_COMPLEX_HTML)
+		sanitizeHTML(rc, out, BenchComplexHtml)
 	}
 }

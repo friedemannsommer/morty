@@ -17,6 +17,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -27,28 +28,28 @@ import (
 	"golang.org/x/net/html/charset"
 	"golang.org/x/text/encoding"
 
-	"github.com/asciimoo/morty/config"
-	"github.com/asciimoo/morty/contenttype"
+	"github.com/friedemannsommer/morty/config"
+	"github.com/friedemannsommer/morty/contenttype"
 )
 
 const (
-	STATE_DEFAULT     int = 0
-	STATE_IN_STYLE    int = 1
-	STATE_IN_NOSCRIPT int = 2
+	StateDefault    int = 0
+	StateInStyle    int = 1
+	StateInNoscript int = 2
 )
 
 const VERSION = "v0.2.1"
 
-const MAX_REDIRECT_COUNT = 5
+const MaxRedirectCount = 5
 
-var CLIENT *fasthttp.Client = &fasthttp.Client{
+var CLIENT = &fasthttp.Client{
 	MaxResponseBodySize: 10 * 1024 * 1024, // 10M
 	ReadBufferSize:      16 * 1024,        // 16K
 }
 
-var cfg *config.Config = config.DefaultConfig
+var cfg = config.DefaultConfig
 
-var ALLOWED_CONTENTTYPE_FILTER contenttype.Filter = contenttype.NewFilterOr([]contenttype.Filter{
+var AllowedContentTypeFilter = contenttype.NewFilterOr([]contenttype.Filter{
 	// html
 	contenttype.NewFilterEquals("text", "html", ""),
 	contenttype.NewFilterEquals("application", "xhtml", "xml"),
@@ -72,7 +73,7 @@ var ALLOWED_CONTENTTYPE_FILTER contenttype.Filter = contenttype.NewFilterOr([]co
 	contenttype.NewFilterEquals("application", "vnd.ms-fontobject", ""),
 })
 
-var ALLOWED_CONTENTTYPE_ATTACHMENT_FILTER contenttype.Filter = contenttype.NewFilterOr([]contenttype.Filter{
+var AllowedContentTypeAttachmentFilter = contenttype.NewFilterOr([]contenttype.Filter{
 	// texts
 	contenttype.NewFilterEquals("text", "csv", ""),
 	contenttype.NewFilterEquals("text", "tab-separated-values", ""),
@@ -96,21 +97,21 @@ var ALLOWED_CONTENTTYPE_ATTACHMENT_FILTER contenttype.Filter = contenttype.NewFi
 	contenttype.NewFilterEquals("application", "octet-stream", ""),
 })
 
-var ALLOWED_CONTENTTYPE_PARAMETERS map[string]bool = map[string]bool{
+var AllowedContentTypeParameters = map[string]bool{
 	"charset": true,
 }
 
-var UNSAFE_ELEMENTS [][]byte = [][]byte{
+var UnsafeElements = [][]byte{
 	[]byte("applet"),
 	[]byte("canvas"),
 	[]byte("embed"),
-	//[]byte("iframe"),
+	[]byte("iframe"),
 	[]byte("math"),
 	[]byte("script"),
 	[]byte("svg"),
 }
 
-var SAFE_ATTRIBUTES [][]byte = [][]byte{
+var SafeAttributes = [][]byte{
 	[]byte("abbr"),
 	[]byte("accesskey"),
 	[]byte("align"),
@@ -147,7 +148,7 @@ var SAFE_ATTRIBUTES [][]byte = [][]byte{
 	[]byte("width"),
 }
 
-var LINK_REL_SAFE_VALUES [][]byte = [][]byte{
+var LinkRelSafeValues = [][]byte{
 	[]byte("alternate"),
 	[]byte("archives"),
 	[]byte("author"),
@@ -160,7 +161,7 @@ var LINK_REL_SAFE_VALUES [][]byte = [][]byte{
 	[]byte("license"),
 	[]byte("manifest"),
 	[]byte("next"),
-	[]byte("pingback"),
+	// []byte("pingback"),
 	[]byte("prev"),
 	[]byte("publisher"),
 	[]byte("search"),
@@ -169,8 +170,8 @@ var LINK_REL_SAFE_VALUES [][]byte = [][]byte{
 	[]byte("up"),
 }
 
-var LINK_HTTP_EQUIV_SAFE_VALUES [][]byte = [][]byte{
-	// X-UA-Compatible will be added automaticaly, so it can be skipped
+var LinkHttpEquivSafeValues = [][]byte{
+	// X-UA-Compatible will be added automatically, so it can be skipped
 	[]byte("date"),
 	[]byte("last-modified"),
 	[]byte("refresh"), // URL rewrite
@@ -178,7 +179,7 @@ var LINK_HTTP_EQUIV_SAFE_VALUES [][]byte = [][]byte{
 	[]byte("content-language"),
 }
 
-var CSS_URL_REGEXP *regexp.Regexp = regexp.MustCompile("url\\((['\"]?)[ \\t\\f]*([\u0009\u0021\u0023-\u0026\u0028\u002a-\u007E]+)(['\"]?)\\)?")
+var CssUrlRegexp = regexp.MustCompile("url\\((['\"]?)[ \\t\\f]*([\u0009\u0021\u0023-\u0026\u0028\u002a-\u007E]+)(['\"]?)\\)?")
 
 type Proxy struct {
 	Key            []byte
@@ -202,14 +203,13 @@ type HTMLFormExtParam struct {
 	MortyHash string
 }
 
-var HTML_FORM_EXTENSION *template.Template
-var HTML_BODY_EXTENSION *template.Template
-var HTML_HEAD_CONTENT_TYPE string = `<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+var HtmlFormExtension *template.Template
+var HtmlBodyExtension *template.Template
+var HtmlHeadContentType = `<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="referrer" content="no-referrer">
 `
-
-var MORTY_HTML_PAGE_START string = `<!doctype html>
+var MortyHtmlPageStart = `<!doctype html>
 <html>
 <head>
 <title>MortyProxy</title>
@@ -231,37 +231,37 @@ h1 { font-size: 3em; }
 	<div class="container">
 		<h1>MortyProxy</h1>
 `
-
-var MORTY_HTML_PAGE_END string = `
+var MortyHtmlPageEnd = `
 	</div>
 	<div class="footer">
 		<p>Morty rewrites web pages to exclude malicious HTML tags and CSS/HTML attributes. It also replaces external resource references to prevent third-party information leaks.<br />
-		<a href="https://github.com/asciimoo/morty">view on github</a>
+		<a href="https://github.com/friedemannsommer/morty">view on github</a>
 		</p>
 	</div>
 </body>
 </html>`
 
-var FAVICON_BYTES []byte
+var FaviconBytes []byte
 
 func init() {
 	FaviconBase64 := "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQEAYAAABPYyMiAAAABmJLR0T///////8JWPfcAAAACXBIWXMAAABIAAAASABGyWs+AAAAF0lEQVRIx2NgGAWjYBSMglEwCkbBSAcACBAAAeaR9cIAAAAASUVORK5CYII"
+	FaviconBytes, _ = base64.StdEncoding.DecodeString(FaviconBase64)
 
-	FAVICON_BYTES, _ = base64.StdEncoding.DecodeString(FaviconBase64)
 	var err error
-	HTML_FORM_EXTENSION, err = template.New("html_form_extension").Parse(
+	HtmlFormExtension, err = template.New("html_form_extension").Parse(
 		`<input type="hidden" name="mortyurl" value="{{.BaseURL}}" />{{if .MortyHash}}<input type="hidden" name="mortyhash" value="{{.MortyHash}}" />{{end}}`)
+
 	if err != nil {
 		panic(err)
 	}
-	HTML_BODY_EXTENSION, err = template.New("html_body_extension").Parse(`
+	HtmlBodyExtension, err = template.New("html_body_extension").Parse(`
 <input type="checkbox" id="mortytoggle" autocomplete="off" />
 <div id="mortyheader">
   <form method="get">
     <label for="mortytoggle">hide</label>
     <span><a href="/">Morty Proxy</a></span>
     <input type="url" value="{{.BaseURL}}" name="mortyurl" {{if .HasMortyKey }}readonly="true"{{end}} />
-    This is a <a href="https://github.com/asciimoo/morty">proxified and sanitized</a> view of the page, visit <a href="{{.BaseURL}}" rel="noreferrer">original site</a>.
+    This is a <a href="https://github.com/friedemannsommer/morty">proxified and sanitized</a> view of the page, visit <a href="{{.BaseURL}}" rel="noreferrer">original site</a>.
   </form>
 </div>
 <style>
@@ -289,7 +289,6 @@ func (p *Proxy) RequestHandler(ctx *fasthttp.RequestCtx) {
 	}
 
 	requestHash := popRequestParam(ctx, []byte("mortyhash"))
-
 	requestURI := popRequestParam(ctx, []byte("mortyurl"))
 
 	if requestURI == nil {
@@ -381,22 +380,22 @@ func (p *Proxy) ProcessUri(ctx *fasthttp.RequestCtx, requestURIStr string, redir
 			if loc != nil {
 				if p.FollowRedirect && ctx.IsGet() {
 					// GET method: Morty follows the redirect
-					if redirectCount < MAX_REDIRECT_COUNT {
+					if redirectCount < MaxRedirectCount {
 						if cfg.Debug {
 							log.Println("follow redirect to", string(loc))
 						}
 						p.ProcessUri(ctx, string(loc), redirectCount+1)
 					} else {
-						p.serveMainPage(ctx, 310, errors.New("Too many redirects"))
+						p.serveMainPage(ctx, 310, errors.New("too many redirects"))
 					}
 					return
 				} else {
 					// Other HTTP methods: Morty does NOT follow the redirect
 					rc := &RequestConfig{Key: p.Key, BaseURL: parsedURI}
-					url, err := rc.ProxifyURI(loc)
+					proxyUri, err := rc.ProxifyURI(loc)
 					if err == nil {
 						ctx.SetStatusCode(resp.StatusCode())
-						ctx.Response.Header.Add("Location", url)
+						ctx.Response.Header.Add("Location", proxyUri)
 						if cfg.Debug {
 							log.Println("redirect to", string(loc))
 						}
@@ -405,8 +404,8 @@ func (p *Proxy) ProcessUri(ctx *fasthttp.RequestCtx, requestURIStr string, redir
 				}
 			}
 		}
-		error_message := fmt.Sprintf("invalid response: %d (%s)", resp.StatusCode(), requestURIStr)
-		p.serveMainPage(ctx, resp.StatusCode(), errors.New(error_message))
+		errorMessage := fmt.Sprintf("invalid response: %d (%s)", resp.StatusCode(), requestURIStr)
+		p.serveMainPage(ctx, resp.StatusCode(), errors.New(errorMessage))
 		return
 	}
 
@@ -421,8 +420,8 @@ func (p *Proxy) ProcessUri(ctx *fasthttp.RequestCtx, requestURIStr string, redir
 	contentTypeString := string(contentTypeBytes)
 
 	// decode Content-Type header
-	contentType, error := contenttype.ParseContentType(contentTypeString)
-	if error != nil {
+	contentType, parseError := contenttype.ParseContentType(contentTypeString)
+	if parseError != nil {
 		// HTTP status code 503 : Service Unavailable
 		p.serveMainPage(ctx, 503, errors.New("invalid content type"))
 		return
@@ -432,9 +431,9 @@ func (p *Proxy) ProcessUri(ctx *fasthttp.RequestCtx, requestURIStr string, redir
 	contentDispositionBytes := ctx.Request.Header.Peek("Content-Disposition")
 
 	// check content type
-	if !ALLOWED_CONTENTTYPE_FILTER(contentType) {
+	if !AllowedContentTypeFilter(contentType) {
 		// it is not a usual content type
-		if ALLOWED_CONTENTTYPE_ATTACHMENT_FILTER(contentType) {
+		if AllowedContentTypeAttachmentFilter(contentType) {
 			// force attachment for allowed content type
 			contentDispositionBytes = contentDispositionForceAttachment(contentDispositionBytes, parsedURI)
 		} else {
@@ -474,7 +473,7 @@ func (p *Proxy) ProcessUri(ctx *fasthttp.RequestCtx, requestURIStr string, redir
 	}
 
 	//
-	contentType.FilterParameters(ALLOWED_CONTENTTYPE_PARAMETERS)
+	contentType.FilterParameters(AllowedContentTypeParameters)
 
 	// set the content type
 	ctx.SetContentType(contentType.String())
@@ -491,7 +490,7 @@ func (p *Proxy) ProcessUri(ctx *fasthttp.RequestCtx, requestURIStr string, redir
 			if len(rc.Key) > 0 {
 				p.HasMortyKey = true
 			}
-			err := HTML_BODY_EXTENSION.Execute(ctx, p)
+			err := HtmlBodyExtension.Execute(ctx, p)
 			if err != nil {
 				if cfg.Debug {
 					fmt.Println("failed to inject body extension", err)
@@ -502,7 +501,7 @@ func (p *Proxy) ProcessUri(ctx *fasthttp.RequestCtx, requestURIStr string, redir
 		if contentDispositionBytes != nil {
 			ctx.Response.Header.AddBytesV("Content-Disposition", contentDispositionBytes)
 		}
-		ctx.Write(responseBody)
+		_, _ = ctx.Write(responseBody)
 	}
 }
 
@@ -533,14 +532,14 @@ func appRequestHandler(ctx *fasthttp.RequestCtx) bool {
 	// serve robots.txt
 	if bytes.Equal(ctx.Path(), []byte("/robots.txt")) {
 		ctx.SetContentType("text/plain")
-		ctx.Write([]byte("User-Agent: *\nDisallow: /\n"))
+		_, _ = ctx.Write([]byte("User-Agent: *\nDisallow: /\n"))
 		return true
 	}
 
 	// server favicon.ico
 	if bytes.Equal(ctx.Path(), []byte("/favicon.ico")) {
 		ctx.SetContentType("image/png")
-		ctx.Write(FAVICON_BYTES)
+		_, _ = ctx.Write(FaviconBytes)
 		return true
 	}
 
@@ -560,12 +559,10 @@ func popRequestParam(ctx *fasthttp.RequestCtx, paramName []byte) []byte {
 }
 
 func sanitizeCSS(rc *RequestConfig, out io.Writer, css []byte) {
-	// TODO
-
-	urlSlices := CSS_URL_REGEXP.FindAllSubmatchIndex(css, -1)
+	urlSlices := CssUrlRegexp.FindAllSubmatchIndex(css, -1)
 
 	if urlSlices == nil {
-		out.Write(css)
+		_, _ = out.Write(css)
 		return
 	}
 
@@ -576,15 +573,15 @@ func sanitizeCSS(rc *RequestConfig, out io.Writer, css []byte) {
 		urlEnd := s[5]
 
 		if uri, err := rc.ProxifyURI(css[urlStart:urlEnd]); err == nil {
-			out.Write(css[startIndex:urlStart])
-			out.Write([]byte(uri))
+			_, _ = out.Write(css[startIndex:urlStart])
+			_, _ = out.Write([]byte(uri))
 			startIndex = urlEnd
 		} else if cfg.Debug {
 			log.Println("cannot proxify css uri:", string(css[urlStart:urlEnd]))
 		}
 	}
 	if startIndex < len(css) {
-		out.Write(css[startIndex:len(css)])
+		_, _ = out.Write(css[startIndex:])
 	}
 }
 
@@ -594,7 +591,7 @@ func sanitizeHTML(rc *RequestConfig, out io.Writer, htmlDoc []byte) {
 	decoder.AllowCDATA(true)
 
 	unsafeElements := make([][]byte, 0, 8)
-	state := STATE_DEFAULT
+	state := StateDefault
 	for {
 		token := decoder.Next()
 		if token == html.ErrorToken {
@@ -610,10 +607,10 @@ func sanitizeHTML(rc *RequestConfig, out io.Writer, htmlDoc []byte) {
 			switch token {
 			case html.StartTagToken, html.SelfClosingTagToken:
 				tag, hasAttrs := decoder.TagName()
-				safe := !inArray(tag, UNSAFE_ELEMENTS)
+				safe := !inArray(tag, UnsafeElements)
 				if !safe {
 					if token != html.SelfClosingTagToken {
-						var unsafeTag []byte = make([]byte, len(tag))
+						var unsafeTag = make([]byte, len(tag))
 						copy(unsafeTag, tag)
 						unsafeElements = append(unsafeElements, unsafeTag)
 					}
@@ -635,7 +632,7 @@ func sanitizeHTML(rc *RequestConfig, out io.Writer, htmlDoc []byte) {
 					break
 				}
 				if bytes.Equal(tag, []byte("noscript")) {
-					state = STATE_IN_NOSCRIPT
+					state = StateInNoscript
 					break
 				}
 				var attrs [][][]byte
@@ -662,23 +659,23 @@ func sanitizeHTML(rc *RequestConfig, out io.Writer, htmlDoc []byte) {
 					break
 				}
 
-				fmt.Fprintf(out, "<%s", tag)
+				_, _ = fmt.Fprintf(out, "<%s", tag)
 
 				if hasAttrs {
 					sanitizeAttrs(rc, out, attrs)
 				}
 
 				if token == html.SelfClosingTagToken {
-					fmt.Fprintf(out, " />")
+					_, _ = fmt.Fprintf(out, " />")
 				} else {
-					fmt.Fprintf(out, ">")
+					_, _ = fmt.Fprintf(out, ">")
 					if bytes.Equal(tag, []byte("style")) {
-						state = STATE_IN_STYLE
+						state = StateInStyle
 					}
 				}
 
 				if bytes.Equal(tag, []byte("head")) {
-					fmt.Fprintf(out, HTML_HEAD_CONTENT_TYPE)
+					_, _ = fmt.Fprintf(out, HtmlHeadContentType)
 				}
 
 				if bytes.Equal(tag, []byte("form")) {
@@ -698,7 +695,7 @@ func sanitizeHTML(rc *RequestConfig, out io.Writer, htmlDoc []byte) {
 					if rc.Key != nil {
 						key = hash(urlStr, rc.Key)
 					}
-					err := HTML_FORM_EXTENSION.Execute(out, HTMLFormExtParam{urlStr, key})
+					err := HtmlFormExtension.Execute(out, HTMLFormExtParam{urlStr, key})
 					if err != nil {
 						if cfg.Debug {
 							fmt.Println("failed to inject body extension", err)
@@ -715,7 +712,7 @@ func sanitizeHTML(rc *RequestConfig, out io.Writer, htmlDoc []byte) {
 					if len(rc.Key) > 0 {
 						p.HasMortyKey = true
 					}
-					err := HTML_BODY_EXTENSION.Execute(out, p)
+					err := HtmlBodyExtension.Execute(out, p)
 					if err != nil {
 						if cfg.Debug {
 							fmt.Println("failed to inject body extension", err)
@@ -723,37 +720,36 @@ func sanitizeHTML(rc *RequestConfig, out io.Writer, htmlDoc []byte) {
 					}
 					rc.BodyInjected = true
 				case "style":
-					state = STATE_DEFAULT
+					state = StateDefault
 				case "noscript":
-					state = STATE_DEFAULT
+					state = StateDefault
 					writeEndTag = false
 				}
 				// skip noscript tags - only the tag, not the content, because javascript is sanitized
 				if writeEndTag {
-					fmt.Fprintf(out, "</%s>", tag)
+					_, _ = fmt.Fprintf(out, "</%s>", tag)
 				}
 
 			case html.TextToken:
 				switch state {
-				case STATE_DEFAULT:
-					fmt.Fprintf(out, "%s", decoder.Raw())
-				case STATE_IN_STYLE:
+				case StateDefault:
+					_, _ = fmt.Fprintf(out, "%s", decoder.Raw())
+				case StateInStyle:
 					sanitizeCSS(rc, out, decoder.Raw())
-				case STATE_IN_NOSCRIPT:
+				case StateInNoscript:
 					sanitizeHTML(rc, out, decoder.Raw())
 				}
 
 			case html.CommentToken:
 				// ignore comment. TODO : parse IE conditional comment
-
 			case html.DoctypeToken:
-				out.Write(decoder.Raw())
+				_, _ = out.Write(decoder.Raw())
 			}
 		} else {
 			switch token {
 			case html.StartTagToken, html.SelfClosingTagToken:
 				tag, _ := decoder.TagName()
-				if inArray(tag, UNSAFE_ELEMENTS) {
+				if inArray(tag, UnsafeElements) {
 					unsafeElements = append(unsafeElements, tag)
 				}
 
@@ -773,7 +769,7 @@ func sanitizeLinkTag(rc *RequestConfig, out io.Writer, attrs [][][]byte) {
 		attrName := attr[0]
 		attrValue := attr[1]
 		if bytes.Equal(attrName, []byte("rel")) {
-			if !inArray(attrValue, LINK_REL_SAFE_VALUES) {
+			if !inArray(attrValue, LinkRelSafeValues) {
 				exclude = true
 				break
 			}
@@ -787,25 +783,25 @@ func sanitizeLinkTag(rc *RequestConfig, out io.Writer, attrs [][][]byte) {
 	}
 
 	if !exclude {
-		out.Write([]byte("<link"))
+		_, _ = out.Write([]byte("<link"))
 		for _, attr := range attrs {
 			sanitizeAttr(rc, out, attr[0], attr[1], attr[2])
 		}
-		out.Write([]byte(">"))
+		_, _ = out.Write([]byte(">"))
 	}
 }
 
 func sanitizeMetaTag(rc *RequestConfig, out io.Writer, attrs [][][]byte) {
-	var http_equiv []byte
+	var httpEquiv []byte
 	var content []byte
 
 	for _, attr := range attrs {
 		attrName := attr[0]
 		attrValue := attr[1]
 		if bytes.Equal(attrName, []byte("http-equiv")) {
-			http_equiv = bytes.ToLower(attrValue)
+			httpEquiv = bytes.ToLower(attrValue)
 			// exclude some <meta http-equiv="..." ..>
-			if !inArray(http_equiv, LINK_HTTP_EQUIV_SAFE_VALUES) {
+			if !inArray(httpEquiv, LinkHttpEquivSafeValues) {
 				return
 			}
 		}
@@ -818,9 +814,9 @@ func sanitizeMetaTag(rc *RequestConfig, out io.Writer, attrs [][][]byte) {
 		}
 	}
 
-	out.Write([]byte("<meta"))
+	_, _ = out.Write([]byte("<meta"))
 	urlIndex := bytes.Index(bytes.ToLower(content), []byte("url="))
-	if bytes.Equal(http_equiv, []byte("refresh")) && urlIndex != -1 {
+	if bytes.Equal(httpEquiv, []byte("refresh")) && urlIndex != -1 {
 		contentUrl := content[urlIndex+4:]
 		// special case of <meta http-equiv="refresh" content="0; url='example.com/url.with.quote.outside'">
 		if len(contentUrl) >= 2 && (contentUrl[0] == byte('\'') || contentUrl[0] == byte('"')) {
@@ -830,15 +826,15 @@ func sanitizeMetaTag(rc *RequestConfig, out io.Writer, attrs [][][]byte) {
 		}
 		// output proxify result
 		if uri, err := rc.ProxifyURI(contentUrl); err == nil {
-			fmt.Fprintf(out, ` http-equiv="refresh" content="%surl=%s"`, content[:urlIndex], uri)
+			_, _ = fmt.Fprintf(out, ` http-equiv="refresh" content="%surl=%s"`, content[:urlIndex], uri)
 		}
 	} else {
-		if len(http_equiv) > 0 {
-			fmt.Fprintf(out, ` http-equiv="%s"`, http_equiv)
+		if len(httpEquiv) > 0 {
+			_, _ = fmt.Fprintf(out, ` http-equiv="%s"`, httpEquiv)
 		}
 		sanitizeAttrs(rc, out, attrs)
 	}
-	out.Write([]byte(">"))
+	_, _ = out.Write([]byte(">"))
 }
 
 func sanitizeAttrs(rc *RequestConfig, out io.Writer, attrs [][][]byte) {
@@ -848,21 +844,21 @@ func sanitizeAttrs(rc *RequestConfig, out io.Writer, attrs [][][]byte) {
 }
 
 func sanitizeAttr(rc *RequestConfig, out io.Writer, attrName, attrValue, escapedAttrValue []byte) {
-	if inArray(attrName, SAFE_ATTRIBUTES) {
-		fmt.Fprintf(out, " %s=\"%s\"", attrName, escapedAttrValue)
+	if inArray(attrName, SafeAttributes) {
+		_, _ = fmt.Fprintf(out, " %s=\"%s\"", attrName, escapedAttrValue)
 		return
 	}
 	switch string(attrName) {
 	case "src", "href", "action":
 		if uri, err := rc.ProxifyURI(attrValue); err == nil {
-			fmt.Fprintf(out, " %s=\"%s\"", attrName, uri)
+			_, _ = fmt.Fprintf(out, " %s=\"%s\"", attrName, uri)
 		} else if cfg.Debug {
 			log.Println("cannot proxify uri:", string(attrValue))
 		}
 	case "style":
 		cssAttr := bytes.NewBuffer(nil)
 		sanitizeCSS(rc, cssAttr, attrValue)
-		fmt.Fprintf(out, " %s=\"%s\"", attrName, html.EscapeString(string(cssAttr.Bytes())))
+		_, _ = fmt.Fprintf(out, " %s=\"%s\"", attrName, html.EscapeString(string(cssAttr.Bytes())))
 	}
 }
 
@@ -873,12 +869,12 @@ func mergeURIs(u1, u2 *url.URL) *url.URL {
 	return u1.ResolveReference(u2)
 }
 
-// Sanitized URI : removes all runes bellow 32 (included) as the begining and end of URI, and lower case the scheme.
+// Sanitized URI : removes all runes bellow 32 (included) as the beginning and end of URI, and lower case the scheme.
 // avoid memory allocation (except for the scheme)
 func sanitizeURI(uri []byte) ([]byte, string) {
-	first_rune_index := 0
-	first_rune_seen := false
-	scheme_last_index := -1
+	firstRuneIndex := 0
+	firstRuneSeen := false
+	schemeLastIndex := -1
 	buffer := bytes.NewBuffer(make([]byte, 0, 10))
 
 	// remove trailing space and special characters
@@ -896,14 +892,14 @@ func sanitizeURI(uri []byte) ([]byte, string) {
 			buffer.WriteByte(c)
 
 			// update the first rune index that is not a special rune
-			if !first_rune_seen {
-				first_rune_index = i
-				first_rune_seen = true
+			if !firstRuneSeen {
+				firstRuneIndex = i
+				firstRuneSeen = true
 			}
 
 			if c == ':' {
 				// colon rune found, we have found the scheme
-				scheme_last_index = i
+				schemeLastIndex = i
 				break
 			} else if c == '/' || c == '?' || c == '\\' || c == '#' {
 				// special case : most probably a relative URI
@@ -912,16 +908,16 @@ func sanitizeURI(uri []byte) ([]byte, string) {
 		}
 	}
 
-	if scheme_last_index != -1 {
+	if schemeLastIndex != -1 {
 		// scheme found
 		// copy the "lower case without special runes scheme" before the ":" rune
-		scheme_start_index := scheme_last_index - buffer.Len() + 1
-		copy(uri[scheme_start_index:], buffer.Bytes())
+		schemeStartIndex := schemeLastIndex - buffer.Len() + 1
+		copy(uri[schemeStartIndex:], buffer.Bytes())
 		// and return the result
-		return uri[scheme_start_index:], buffer.String()
+		return uri[schemeStartIndex:], buffer.String()
 	} else {
 		// scheme NOT found
-		return uri[first_rune_index:], ""
+		return uri[firstRuneIndex:], ""
 	}
 }
 
@@ -979,12 +975,12 @@ func (rc *RequestConfig) ProxifyURI(uri []byte) (string, error) {
 	}
 
 	// return full URI and fragment (if not empty)
-	morty_uri := u.String()
+	mortyUri := u.String()
 
 	if rc.Key == nil {
-		return fmt.Sprintf("./?mortyurl=%s%s", url.QueryEscape(morty_uri), fragment), nil
+		return fmt.Sprintf("./?mortyurl=%s%s", url.QueryEscape(mortyUri), fragment), nil
 	}
-	return fmt.Sprintf("./?mortyhash=%s&mortyurl=%s%s", hash(morty_uri, rc.Key), url.QueryEscape(morty_uri), fragment), nil
+	return fmt.Sprintf("./?mortyhash=%s&mortyurl=%s%s", hash(mortyUri, rc.Key), url.QueryEscape(mortyUri), fragment), nil
 }
 
 func inArray(b []byte, a [][]byte) bool {
@@ -1019,71 +1015,94 @@ func verifyRequestURI(uri, hashMsg, key []byte) bool {
 func (p *Proxy) serveExitMortyPage(ctx *fasthttp.RequestCtx, uri *url.URL) {
 	ctx.SetContentType("text/html")
 	ctx.SetStatusCode(403)
-	ctx.Write([]byte(MORTY_HTML_PAGE_START))
-	ctx.Write([]byte("<h2>You are about to exit MortyProxy</h2>"))
-	ctx.Write([]byte("<p>Following</p><p><a href=\""))
-	ctx.Write([]byte(html.EscapeString(uri.String())))
-	ctx.Write([]byte("\" rel=\"noreferrer\">"))
-	ctx.Write([]byte(html.EscapeString(uri.String())))
-	ctx.Write([]byte("</a></p><p>the content of this URL will be <b>NOT</b> sanitized.</p>"))
-	ctx.Write([]byte(MORTY_HTML_PAGE_END))
+	_, _ = ctx.Write([]byte(MortyHtmlPageStart))
+	_, _ = ctx.Write([]byte("<h2>You are about to exit MortyProxy</h2>"))
+	_, _ = ctx.Write([]byte("<p>Following</p><p><a href=\""))
+	_, _ = ctx.Write([]byte(html.EscapeString(uri.String())))
+	_, _ = ctx.Write([]byte("\" rel=\"noreferrer\">"))
+	_, _ = ctx.Write([]byte(html.EscapeString(uri.String())))
+	_, _ = ctx.Write([]byte("</a></p><p>the content of this URL will be <b>NOT</b> sanitized.</p>"))
+	_, _ = ctx.Write([]byte(MortyHtmlPageEnd))
 }
 
 func (p *Proxy) serveMainPage(ctx *fasthttp.RequestCtx, statusCode int, err error) {
 	ctx.SetContentType("text/html; charset=UTF-8")
 	ctx.SetStatusCode(statusCode)
-	ctx.Write([]byte(MORTY_HTML_PAGE_START))
+	_, _ = ctx.Write([]byte(MortyHtmlPageStart))
 	if err != nil {
 		if cfg.Debug {
 			log.Println("error:", err)
 		}
-		ctx.Write([]byte("<h2>Error: "))
-		ctx.Write([]byte(html.EscapeString(err.Error())))
-		ctx.Write([]byte("</h2>"))
+		_, _ = ctx.Write([]byte("<h2>Error: "))
+		_, _ = ctx.Write([]byte(html.EscapeString(err.Error())))
+		_, _ = ctx.Write([]byte("</h2>"))
 	}
 	if p.Key == nil {
-		ctx.Write([]byte(`
+		_, _ = ctx.Write([]byte(`
 		<form action="post">
 		Visit url: <input placeholder="https://url.." name="mortyurl" autofocus />
 		<input type="submit" value="go" />
 		</form>`))
 	} else {
-		ctx.Write([]byte(`<h3>Warning! This instance does not support direct URL opening.</h3>`))
+		_, _ = ctx.Write([]byte(`<h3>Warning! This instance does not support direct URL opening.</h3>`))
 	}
-	ctx.Write([]byte(MORTY_HTML_PAGE_END))
+	_, _ = ctx.Write([]byte(MortyHtmlPageEnd))
 }
 
 func main() {
+	var hmacKey string
+
+	flag.StringVar(&hmacKey, "key", "", "HMAC url validation key (base64 encoded) - leave blank to disable validation")
 	listenAddress := flag.String("listen", cfg.ListenAddress, "Listen address")
-	key := flag.String("key", cfg.Key, "HMAC url validation key (base64 encoded) - leave blank to disable validation")
 	IPV6 := flag.Bool("ipv6", cfg.IPV6, "Allow IPv6 HTTP requests")
 	debug := flag.Bool("debug", cfg.Debug, "Debug mode")
-	requestTimeout := flag.Uint("timeout", cfg.RequestTimeout, "Request timeout")
+	requestTimeoutStr := flag.String("timeout", "", "Request timeout")
 	followRedirect := flag.Bool("followredirect", cfg.FollowRedirect, "Follow HTTP GET redirect")
-	proxyenv := flag.Bool("proxyenv", false, "Use a HTTP proxy as set in the environment (HTTP_PROXY, HTTPS_PROXY and NO_PROXY). Overrides -proxy, -socks5, -ipv6.")
+	proxyEnv := flag.Bool("proxyenv", false, "Use a HTTP proxy as set in the environment (HTTP_PROXY, HTTPS_PROXY and NO_PROXY). Overrides -proxy, -socks5, -ipv6.")
 	proxy := flag.String("proxy", "", "Use the specified HTTP proxy (ie: '[user:pass@]hostname:port'). Overrides -socks5, -ipv6.")
 	socks5 := flag.String("socks5", "", "Use a SOCKS5 proxy (ie: 'hostname:port'). Overrides -ipv6.")
 	version := flag.Bool("version", false, "Show version")
 	flag.Parse()
-
-	cfg.ListenAddress = *listenAddress
-	cfg.Key = *key
-	cfg.IPV6 = *IPV6
-	cfg.Debug = *debug
-	cfg.RequestTimeout = *requestTimeout
-	cfg.FollowRedirect = *followRedirect
 
 	if *version {
 		fmt.Println(VERSION)
 		return
 	}
 
-	if *proxyenv && os.Getenv("HTTP_PROXY") == "" && os.Getenv("HTTPS_PROXY") == "" {
+	cfg.ListenAddress = *listenAddress
+	cfg.IPV6 = *IPV6
+	cfg.Debug = *debug
+	cfg.FollowRedirect = *followRedirect
+
+	if *proxyEnv && os.Getenv("HTTP_PROXY") == "" && os.Getenv("HTTPS_PROXY") == "" {
 		log.Fatal("Error -proxyenv is used but no environment variables named 'HTTP_PROXY' and/or 'HTTPS_PROXY' could be found.")
-		os.Exit(1)
 	}
 
-	if *proxyenv {
+	if cfg.ListenAddress == "" {
+		log.Fatal("Error no listen address defined")
+	}
+
+	if hmacKey == "" {
+		hmacKey = os.Getenv("MORTY_KEY")
+	}
+
+	if *requestTimeoutStr != "" {
+		parsedUint, err := strconv.ParseUint(*requestTimeoutStr, 10, 8)
+
+		if err != nil {
+			log.Fatalf("Error -timeout is to large: %v", err)
+		}
+
+		cfg.RequestTimeout = uint8(parsedUint)
+	}
+
+	cfg.Key = hmacKey
+
+	if cfg.Debug {
+		fmt.Printf("Using config: %+v\n", cfg)
+	}
+
+	if *proxyEnv {
 		CLIENT.Dial = fasthttpproxy.FasthttpProxyHTTPDialer()
 		log.Println("Using environment defined proxy(ies).")
 	} else if *proxy != "" {
@@ -1105,16 +1124,17 @@ func main() {
 
 	if cfg.Key != "" {
 		var err error
+
 		p.Key, err = base64.StdEncoding.DecodeString(cfg.Key)
+
 		if err != nil {
-			log.Fatal("Error parsing -key", err.Error())
-			os.Exit(1)
+			log.Fatalf("Error parsing -key: %v", err.Error())
 		}
 	}
 
-	log.Println("listening on", cfg.ListenAddress)
+	log.Println("listening on:", cfg.ListenAddress)
 
 	if err := fasthttp.ListenAndServe(cfg.ListenAddress, p.RequestHandler); err != nil {
-		log.Fatal("Error in ListenAndServe:", err)
+		log.Fatalf("Error in ListenAndServe: %v", err)
 	}
 }

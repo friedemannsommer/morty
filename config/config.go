@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"strconv"
 )
 
 type Config struct {
@@ -9,24 +10,29 @@ type Config struct {
 	ListenAddress  string
 	Key            string
 	IPV6           bool
-	RequestTimeout uint
+	RequestTimeout uint8
 	FollowRedirect bool
 }
 
 var DefaultConfig *Config
 
 func init() {
-	default_listen_addr := os.Getenv("MORTY_ADDRESS")
-	if default_listen_addr == "" {
-		default_listen_addr = "127.0.0.1:3000"
+	var requestTimeout uint8 = 5
+	requestTimeoutStr := os.Getenv("MORTY_REQUEST_TIMEOUT")
+
+	if requestTimeoutStr != "" {
+		parsedUint, err := strconv.ParseUint(requestTimeoutStr, 10, 8)
+		if err == nil {
+			requestTimeout = uint8(parsedUint)
+		}
 	}
-	default_key := os.Getenv("MORTY_KEY")
+
 	DefaultConfig = &Config{
-		Debug:          os.Getenv("DEBUG") != "false",
-		ListenAddress:  default_listen_addr,
-		Key:            default_key,
-		IPV6:           true,
-		RequestTimeout: 5,
-		FollowRedirect: false,
+		Debug:          os.Getenv("DEBUG") == "true",
+		ListenAddress:  os.Getenv("MORTY_ADDRESS"),
+		Key:            "",
+		IPV6:           os.Getenv("MORTY_IPV6") == "true",
+		RequestTimeout: requestTimeout,
+		FollowRedirect: os.Getenv("MORTY_FOLLOW_REDIRECTS") == "true",
 	}
 }

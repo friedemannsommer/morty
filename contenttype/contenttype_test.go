@@ -12,28 +12,28 @@ type ParseContentTypeTestCase struct {
 	ExpectedString *string      /* or nil if equals to Input */
 }
 
-var parseContentTypeTestCases []ParseContentTypeTestCase = []ParseContentTypeTestCase{
-	ParseContentTypeTestCase{
+var parseContentTypeTestCases = []ParseContentTypeTestCase{
+	{
 		"text/html",
 		&ContentType{"text", "html", "", map[string]string{}},
 		nil,
 	},
-	ParseContentTypeTestCase{
+	{
 		"text/svg+xml; charset=UTF-8",
 		&ContentType{"text", "svg", "xml", map[string]string{"charset": "UTF-8"}},
 		nil,
 	},
-	ParseContentTypeTestCase{
+	{
 		"text/",
 		nil,
 		nil,
 	},
-	ParseContentTypeTestCase{
+	{
 		"text; charset=UTF-8",
 		&ContentType{"text", "", "", map[string]string{"charset": "UTF-8"}},
 		nil,
 	},
-	ParseContentTypeTestCase{
+	{
 		"text/+xml; charset=UTF-8",
 		&ContentType{"text", "", "xml", map[string]string{"charset": "UTF-8"}},
 		nil,
@@ -45,32 +45,32 @@ type ContentTypeEqualsTestCase struct {
 	Equals bool
 }
 
-var Map_Empty map[string]string = map[string]string{}
-var Map_A map[string]string = map[string]string{"a": "value_a"}
-var Map_B map[string]string = map[string]string{"b": "value_b"}
-var Map_AB map[string]string = map[string]string{"a": "value_a", "b": "value_b"}
+var MapEmpty = map[string]string{}
+var MapA = map[string]string{"a": "value_a"}
+var MapB = map[string]string{"b": "value_b"}
+var MapAb = map[string]string{"a": "value_a", "b": "value_b"}
 
-var ContentType_E ContentType = ContentType{"a", "b", "c", Map_Empty}
-var ContentType_A ContentType = ContentType{"a", "b", "c", Map_A}
-var ContentType_B ContentType = ContentType{"a", "b", "c", Map_B}
-var ContentType_AB ContentType = ContentType{"a", "b", "c", Map_AB}
+var ContentTypeE = ContentType{"a", "b", "c", MapEmpty}
+var ContentTypeA = ContentType{"a", "b", "c", MapA}
+var ContentTypeB = ContentType{"a", "b", "c", MapB}
+var ContentTypeAb = ContentType{"a", "b", "c", MapAb}
 
-var contentTypeEqualsTestCases []ContentTypeEqualsTestCase = []ContentTypeEqualsTestCase{
+var contentTypeEqualsTestCases = []ContentTypeEqualsTestCase{
 	// TopLevelType, SubType, Suffix
-	ContentTypeEqualsTestCase{ContentType_E, ContentType{"a", "b", "c", Map_Empty}, true},
-	ContentTypeEqualsTestCase{ContentType_E, ContentType{"o", "b", "c", Map_Empty}, false},
-	ContentTypeEqualsTestCase{ContentType_E, ContentType{"a", "o", "c", Map_Empty}, false},
-	ContentTypeEqualsTestCase{ContentType_E, ContentType{"a", "b", "o", Map_Empty}, false},
+	{ContentTypeE, ContentType{"a", "b", "c", MapEmpty}, true},
+	{ContentTypeE, ContentType{"o", "b", "c", MapEmpty}, false},
+	{ContentTypeE, ContentType{"a", "o", "c", MapEmpty}, false},
+	{ContentTypeE, ContentType{"a", "b", "o", MapEmpty}, false},
 	// Parameters
-	ContentTypeEqualsTestCase{ContentType_A, ContentType_A, true},
-	ContentTypeEqualsTestCase{ContentType_B, ContentType_B, true},
-	ContentTypeEqualsTestCase{ContentType_AB, ContentType_AB, true},
-	ContentTypeEqualsTestCase{ContentType_A, ContentType_E, false},
-	ContentTypeEqualsTestCase{ContentType_A, ContentType_B, false},
-	ContentTypeEqualsTestCase{ContentType_B, ContentType_A, false},
-	ContentTypeEqualsTestCase{ContentType_AB, ContentType_A, false},
-	ContentTypeEqualsTestCase{ContentType_AB, ContentType_E, false},
-	ContentTypeEqualsTestCase{ContentType_A, ContentType_AB, false},
+	{ContentTypeA, ContentTypeA, true},
+	{ContentTypeB, ContentTypeB, true},
+	{ContentTypeAb, ContentTypeAb, true},
+	{ContentTypeA, ContentTypeE, false},
+	{ContentTypeA, ContentTypeB, false},
+	{ContentTypeB, ContentTypeA, false},
+	{ContentTypeAb, ContentTypeA, false},
+	{ContentTypeAb, ContentTypeE, false},
+	{ContentTypeA, ContentTypeAb, false},
 }
 
 type FilterTestCase struct {
@@ -80,72 +80,72 @@ type FilterTestCase struct {
 	FalseValues []ContentType
 }
 
-var filterTestCases []FilterTestCase = []FilterTestCase{
-	FilterTestCase{
+var filterTestCases = []FilterTestCase{
+	{
 		"contains xml",
 		NewFilterContains("xml"),
 		[]ContentType{
-			ContentType{"xml", "", "", Map_Empty},
-			ContentType{"text", "xml", "", Map_Empty},
-			ContentType{"text", "html", "xml", Map_Empty},
+			{"xml", "", "", MapEmpty},
+			{"text", "xml", "", MapEmpty},
+			{"text", "html", "xml", MapEmpty},
 		},
 		[]ContentType{
-			ContentType{"text", "svg", "", map[string]string{"script": "javascript"}},
-			ContentType{"java", "script", "", Map_Empty},
+			{"text", "svg", "", map[string]string{"script": "javascript"}},
+			{"java", "script", "", MapEmpty},
 		},
 	},
-	FilterTestCase{
+	{
 		"equals applications/xhtml",
 		NewFilterEquals("application", "xhtml", "*"),
 		[]ContentType{
-			ContentType{"application", "xhtml", "xml", Map_Empty},
-			ContentType{"application", "xhtml", "", Map_Empty},
-			ContentType{"application", "xhtml", "zip", Map_Empty},
-			ContentType{"application", "xhtml", "zip", Map_AB},
+			{"application", "xhtml", "xml", MapEmpty},
+			{"application", "xhtml", "", MapEmpty},
+			{"application", "xhtml", "zip", MapEmpty},
+			{"application", "xhtml", "zip", MapAb},
 		},
 		[]ContentType{
-			ContentType{"application", "javascript", "", Map_Empty},
-			ContentType{"text", "xhtml", "", Map_Empty},
+			{"application", "javascript", "", MapEmpty},
+			{"text", "xhtml", "", MapEmpty},
 		},
 	},
-	FilterTestCase{
+	{
 		"equals application/*",
 		NewFilterEquals("application", "*", ""),
 		[]ContentType{
-			ContentType{"application", "xhtml", "", Map_Empty},
-			ContentType{"application", "javascript", "", Map_Empty},
+			{"application", "xhtml", "", MapEmpty},
+			{"application", "javascript", "", MapEmpty},
 		},
 		[]ContentType{
-			ContentType{"text", "xhtml", "", Map_Empty},
-			ContentType{"text", "xhtml", "xml", Map_Empty},
+			{"text", "xhtml", "", MapEmpty},
+			{"text", "xhtml", "xml", MapEmpty},
 		},
 	},
-	FilterTestCase{
+	{
 		"equals applications */javascript",
 		NewFilterEquals("*", "javascript", ""),
 		[]ContentType{
-			ContentType{"application", "javascript", "", Map_Empty},
-			ContentType{"text", "javascript", "", Map_Empty},
+			{"application", "javascript", "", MapEmpty},
+			{"text", "javascript", "", MapEmpty},
 		},
 		[]ContentType{
-			ContentType{"text", "html", "", Map_Empty},
-			ContentType{"text", "javascript", "zip", Map_Empty},
+			{"text", "html", "", MapEmpty},
+			{"text", "javascript", "zip", MapEmpty},
 		},
 	},
-	FilterTestCase{
+	{
 		"equals applications/* or */javascript",
 		NewFilterOr([]Filter{
 			NewFilterEquals("application", "*", ""),
 			NewFilterEquals("*", "javascript", ""),
 		}),
 		[]ContentType{
-			ContentType{"application", "javascript", "", Map_Empty},
-			ContentType{"text", "javascript", "", Map_Empty},
-			ContentType{"application", "xhtml", "", Map_Empty},
+			{"application", "javascript", "", MapEmpty},
+			{"text", "javascript", "", MapEmpty},
+			{"application", "xhtml", "", MapEmpty},
 		},
 		[]ContentType{
-			ContentType{"text", "html", "", Map_Empty},
-			ContentType{"application", "xhtml", "xml", Map_Empty},
+			{"text", "html", "", MapEmpty},
+			{"application", "xhtml", "xml", MapEmpty},
 		},
 	},
 }
@@ -156,23 +156,23 @@ type FilterParametersTestCase struct {
 	Output map[string]string
 }
 
-var filterParametersTestCases []FilterParametersTestCase = []FilterParametersTestCase{
-	FilterParametersTestCase{
+var filterParametersTestCases = []FilterParametersTestCase{
+	{
 		map[string]string{},
 		map[string]bool{"A": true, "B": true},
 		map[string]string{},
 	},
-	FilterParametersTestCase{
+	{
 		map[string]string{"A": "value_A", "B": "value_B"},
 		map[string]bool{},
 		map[string]string{},
 	},
-	FilterParametersTestCase{
+	{
 		map[string]string{"A": "value_A", "B": "value_B"},
 		map[string]bool{"A": true},
 		map[string]string{"A": "value_A"},
 	},
-	FilterParametersTestCase{
+	{
 		map[string]string{"A": "value_A", "B": "value_B"},
 		map[string]bool{"A": true, "B": true},
 		map[string]string{"A": "value_A", "B": "value_B"},
@@ -225,9 +225,9 @@ func FilterToString(m map[string]bool) string {
 	b := new(bytes.Buffer)
 	for key, value := range m {
 		if value {
-			fmt.Fprintf(b, "'%s'=true;", key)
+			_, _ = fmt.Fprintf(b, "'%s'=true;", key)
 		} else {
-			fmt.Fprintf(b, "'%s'=false;", key)
+			_, _ = fmt.Fprintf(b, "'%s'=false;", key)
 		}
 	}
 	return b.String()

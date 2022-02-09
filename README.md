@@ -34,11 +34,11 @@ $ "$GOPATH/bin/morty" --help
 
 ```
   -debug
-        Debug mode (default true)
+        Debug mode (default false)
   -followredirect
         Follow HTTP GET redirect
   -ipv6
-        Allow IPv6 HTTP requests (default true)
+        Allow IPv6 HTTP requests (default false)
   -key string
         HMAC url validation key (base64 encoded) - leave blank to disable validation
   -listen string
@@ -61,6 +61,9 @@ Morty can additionally be configured using the following environment variables:
 - `MORTY_ADDRESS`: Listen address (default to `127.0.0.1:3000`)
 - `MORTY_KEY`: HMAC url validation key (base64 encoded) to prevent direct URL opening. Leave blank to disable validation. Use `openssl rand -base64 33` to generate.
 - `DEBUG`: Enable/disable proxy and redirection logs (default to `true`). Set to `false` to disable.
+- `MORTY_IPV6`: Allow IPv6 HTTP requests
+- `MORTY_REQUEST_TIMEOUT`: Request timeout
+- `MORTY_FOLLOW_REDIRECTS`: Follow HTTP redirects
 
 ### Docker
 

@@ -6,23 +6,25 @@
 
 Web content sanitizer proxy as a service
 
-Morty rewrites web pages to exclude malicious HTML tags and attributes. It also replaces external resource references to prevent third party information leaks.
+Morty rewrites web pages to exclude malicious HTML tags and attributes. It also replaces external resource references to
+prevent third party information leaks.
 
-The main goal of morty is to provide a result proxy for [searx](https://asciimoo.github.com/searx/), but it can be used as a standalone sanitizer service too.
+The main goal of morty is to provide a result proxy for [searx](https://asciimoo.github.com/searx/), but it can be used
+as a standalone sanitizer service too.
 
 Features:
 
- - HTML sanitization
- - Rewrites HTML/CSS external references to locals
- - JavaScript blocking
- - No Cookies forwarded
- - No Referrers
- - No Caching/Etag
- - Supports GET/POST forms
- - Optional HMAC URL verifier key to prevent service abuse
-
+- HTML sanitization
+- Rewrites HTML/CSS external references to locals
+- JavaScript blocking
+- No Cookies forwarded
+- No Referrers
+- No Caching/Etag
+- Supports GET/POST forms
+- Optional HMAC URL verifier key to prevent service abuse
 
 ## Installation and setup
+
 Requirement: Go version 1.10 or higher.
 
 ```
@@ -42,7 +44,7 @@ $ "$GOPATH/bin/morty" --help
   -key string
         HMAC url validation key (base64 encoded) - leave blank to disable validation
   -listen string
-        Listen address (default "127.0.0.1:3000")
+        Listen address (no default)
   -proxy string
         Use the specified HTTP proxy (ie: '[user:pass@]hostname:port'). Overrides -socks5, -ipv6.
   -proxyenv
@@ -58,11 +60,13 @@ $ "$GOPATH/bin/morty" --help
 ### Environment variables
 
 Morty can additionally be configured using the following environment variables:
-- `MORTY_ADDRESS`: Listen address (default to `127.0.0.1:3000`)
-- `MORTY_KEY`: HMAC url validation key (base64 encoded) to prevent direct URL opening. Leave blank to disable validation. Use `openssl rand -base64 33` to generate.
-- `DEBUG`: Enable/disable proxy and redirection logs (default to `true`). Set to `false` to disable.
+
+- `MORTY_ADDRESS`: Listen address (**no** default)
+- `MORTY_KEY`: HMAC url validation key (base64 encoded) to prevent direct URL opening. Leave blank to disable
+  validation. Use `openssl rand -base64 33` to generate.
+- `DEBUG`: Enable/disable proxy and redirection logs (default to `false`)
 - `MORTY_IPV6`: Allow IPv6 HTTP requests
-- `MORTY_REQUEST_TIMEOUT`: Request timeout
+- `MORTY_REQUEST_TIMEOUT`: Request timeout in seconds
 - `MORTY_FOLLOW_REDIRECTS`: Follow HTTP redirects
 
 ### Docker
@@ -75,7 +79,6 @@ docker run -e DEBUG=false -e MORTY_ADDRESS=0.0.0.0:3000 dalf/morty
 docker run -e DEBUG=false dalf/morty -listen 0.0.0.0:3000
 ```
 
-
 ### Test
 
 ```
@@ -83,14 +86,12 @@ $ cd "$GOPATH/src/github.com/asciimoo/morty"
 $ go test
 ```
 
-
 ### Benchmark
 
 ```
 $ cd "$GOPATH/src/github.com/asciimoo/morty"
 $ go test -benchmem -bench .
 ```
-
 
 ## Bugs
 

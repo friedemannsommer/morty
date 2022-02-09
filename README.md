@@ -18,7 +18,7 @@ Features:
  - No Cookies forwarded
  - No Referrers
  - No Caching/Etag
- - Supports GET/POST forms and IFrames
+ - Supports GET/POST forms
  - Optional HMAC URL verifier key to prevent service abuse
 
 
